@@ -4,11 +4,8 @@
 
 ## How to run
 
-Just run it like strace:
+Just run it like strace, e.g.:
 
 ```sh
-cargo run <executable path> <args>
+cargo run echo 'Hello, world!'
 ```
-
-For the time being, the executable path must be the executable's absolute path (i.e. to trace `echo`, use `/usr/bin/echo`)
-
