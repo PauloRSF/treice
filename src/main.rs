@@ -9,12 +9,8 @@ use syscalls::Sysno;
 fn exec_tracee() {
     ptrace::traceme().expect("Failed to mark tracee as traceable");
 
-    let args = env::args().collect::<Vec<String>>();
-
-    let tracee_args = args
-        .iter()
+    let tracee_args = env::args()
         .skip(1)
-        .cloned()
         .map(|arg| CString::new(arg).unwrap())
         .collect::<Vec<_>>();
 
@@ -25,21 +21,18 @@ fn exec_tracee() {
         .map(|arg| CString::new(arg).unwrap())
         .collect::<Vec<_>>();
 
-    unistd::execve(&exec_path.clone(), &tracee_args, &tracee_env)
-        .expect("Failed to execve successfully");
+    unistd::execve(&exec_path, &tracee_args, &tracee_env).expect("Failed to execve successfully");
 }
 
 fn spawn_tracee_process() -> Pid {
     match unsafe { fork() } {
-        Ok(ForkResult::Parent { child, .. }) => {
-            return child;
-        }
+        Ok(ForkResult::Parent { child, .. }) => child,
         Ok(ForkResult::Child) => {
             exec_tracee();
             unreachable!();
         }
         Err(_) => panic!("Fork failed"),
-    };
+    }
 }
 
 fn main() {
