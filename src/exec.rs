@@ -1,5 +1,7 @@
 use std::{env, path::PathBuf};
 
+use crate::error::TreiceError;
+
 fn find_executable_in_os_lookup_paths(executable_path: &PathBuf) -> Option<PathBuf> {
     match env::var("PATH") {
         Err(_) => None,
@@ -22,4 +24,12 @@ pub fn find_absolute_executable_path(executable_path: &String) -> Option<PathBuf
     } else {
         find_executable_in_os_lookup_paths(&executable_path_buf)
     }
+}
+
+pub fn get_executable_path_from_args() -> Result<PathBuf, TreiceError> {
+    let path_arg = env::args()
+        .nth(1)
+        .ok_or(TreiceError::NoExecutableProvided)?;
+
+    find_absolute_executable_path(&path_arg).ok_or(TreiceError::ExecutableNotFound)
 }

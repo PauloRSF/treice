@@ -1,63 +1,47 @@
-use std::{env, process::exit};
+use libc::{siginfo_t, SIGTRAP};
+use nix::sys::{ptrace, wait::WaitStatus};
 
-use nix::{
-    errno::Errno,
-    sys::{ptrace, wait::waitpid},
-};
 use treice::{
-    exec::find_absolute_executable_path, syscall::print_syscall_data, tracee::spawn_tracee_process,
+    error::{exit_with_error_code, TreiceError},
+    exec::get_executable_path_from_args,
+    syscall::print_syscall_info,
+    tracee::spawn_tracee,
 };
 
-fn main() {
-    let executable_path_arg = match env::args().skip(1).rev().last() {
-        Some(arg) => arg,
-        None => {
-            eprintln!("No executable specified");
-            exit(1);
-        }
-    };
+fn execute() -> Result<(), TreiceError> {
+    let tracee = get_executable_path_from_args().and_then(spawn_tracee)?;
 
-    let executable_path = match find_absolute_executable_path(&executable_path_arg) {
-        Some(path) => path,
-        None => {
-            eprintln!("Could not find executable");
-            exit(2);
-        }
-    };
-
-    let tracee_pid = spawn_tracee_process(executable_path.as_path());
-
-    println!("Tracee PID: {tracee_pid}\n");
+    println!("Tracee PID: {}\n", tracee.pid);
 
     loop {
-        let wait_result = waitpid(tracee_pid, None);
+        let tracee_status = tracee.wait()?;
 
-        if let Err(Errno::ESRCH) = wait_result {
-            println!("ESRCH after wait");
-            exit(0);
+        if let WaitStatus::Exited(_, code) = tracee_status {
+            println!("+++ exited with {} +++", code);
+            break;
         }
 
-        if let Err(errno) = wait_result {
-            eprintln!("Failed to wait for child process: {errno}");
-            exit(3);
+        if let WaitStatus::Signaled(_, signal, _) = tracee_status {
+            println!("+++ killed by {} +++", signal);
+            break;
         }
 
-        let registers = match ptrace::getregs(tracee_pid) {
-            Ok(regs) => regs,
-            Err(Errno::ESRCH) => {
-                println!("ESRCH after reading registers");
-                exit(0);
-            }
-            Err(errno) => {
-                eprintln!("Failed to read registers: {errno}");
-                exit(4);
-            }
-        };
+        tracee.set_tracing_options()?;
 
-        // dbg!(registers);
 
-        print_syscall_data(&tracee_pid, &registers);
+        let syscall_info = tracee.get_syscall_info()?;
 
-        ptrace::syscall(tracee_pid, None).unwrap();
+        print_syscall_info(&tracee, &syscall_info)?;
+
+        ptrace::syscall(tracee.pid, None).unwrap();
+    }
+
+    Ok(())
+}
+
+fn main() {
+    if let Err(error) = execute() {
+        eprintln!("{error}");
+        exit_with_error_code(&error);
     }
 }
