@@ -4,6 +4,7 @@ use nix::sys::{ptrace, wait::WaitStatus};
 use treice::{
     error::{exit_with_error_code, TreiceError},
     exec::get_executable_path_from_args,
+    signal::print_signal_data,
     syscall::print_syscall_info,
     tracee::spawn_tracee,
 };
@@ -28,6 +29,13 @@ fn execute() -> Result<(), TreiceError> {
 
         tracee.set_tracing_options()?;
 
+        match tracee.get_signal_info()? {
+            // If the signal is a SIGTRAP (si_signo: 5), don't show anything
+            siginfo_t {
+                si_signo: SIGTRAP, ..
+            } => {}
+            signal_info => print_signal_data(&signal_info),
+        }
 
         let syscall_info = tracee.get_syscall_info()?;
 
